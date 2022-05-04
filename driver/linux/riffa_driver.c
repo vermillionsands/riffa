@@ -51,7 +51,7 @@
 #include <linux/fs.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
-#include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/rwsem.h>
 #include <linux/dma-mapping.h>
 #include <linux/pagemap.h>
@@ -439,14 +439,10 @@ static inline struct sg_mapping * fill_sg_buf(struct fpga_state * sc, int chnl,
 			return NULL;
 		}
 
-		// Page in the user pages.
-		down_read(&current->mm->mmap_sem);
-		#if LINUX_VERSION_CODE < KERNEL_VERSION(4,6,0)
-		num_pages = get_user_pages(current, current->mm, udata, num_pages_reqd, 1, 0, pages, NULL);
-		#else
-		num_pages = get_user_pages(udata, num_pages_reqd, 1, 0, pages, NULL);
-		#endif
-		up_read(&current->mm->mmap_sem);
+		// Page in the user pages
+		mmap_read_lock(current->mm);
+		num_pages = get_user_pages(udata, num_pages_reqd, FOLL_WRITE, pages, NULL);
+		mmap_read_unlock(current->mm);
 		if (num_pages <= 0) {
 			printk(KERN_ERR "riffa: fpga:%d chnl:%d, %s unable to pin any pages in memory\n", sc->id, chnl, dir);
 			kfree(pages);
@@ -1530,10 +1526,10 @@ static void __devexit fpga_remove(struct pci_dev *dev)
 // MODULE INIT/EXIT FUNCTIONS
 ///////////////////////////////////////////////////////
 
-static DEFINE_PCI_DEVICE_TABLE(fpga_ids) = {
+static struct pci_device_id fpga_ids[] = {
 	{PCI_DEVICE(VENDOR_ID0, PCI_ANY_ID)},
 	{PCI_DEVICE(VENDOR_ID1, PCI_ANY_ID)},
-	{0},
+	{}
 };
 
 MODULE_DEVICE_TABLE(pci, fpga_ids);

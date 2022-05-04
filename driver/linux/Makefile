@@ -51,7 +51,6 @@ MAJNUM := 100
 # Build variables
 KVER := $(shell uname -r)
 KDIR := /lib/modules/`uname -r`/build
-RHR := /etc/redhat-release
 LIB_SRCS := riffa.c
 LIB_OBJS := $(patsubst %.c,%.o,$(LIB_SRCS))
 LIB_HDR := riffa.h
@@ -98,7 +97,7 @@ $(NAME).ko: *.c *.h
 	sed -i 's/#define VENDOR_ID1 [^\n]*/#define VENDOR_ID1 0x$(VENDOR_ID1)/g' $(DRVR_HDR)
 	sed -i 's/#define DEBUG [^\n]*/#define DBUG 1/g' $(DRVR_HDR)
 	sed -i 's/#define DBUG [^\n]*/#define $(DBUGVAL) 1/g' $(DRVR_HDR)
-	make -C $(KDIR) SUBDIRS=`pwd` modules
+	@$(MAKE) -C $(KDIR) M=$(shell pwd) modules
 	rm -rf $(LIB_OBJS)
 
 $(NAME).so.$(LIB_VER): $(LIB_OBJS)
@@ -115,41 +114,5 @@ unload:
 
 clean:
 	rm -Rf *.ko *.cmd *.o *.so *.so.* .*.cmd Module.symvers Module.markers modules.order *.mod.c .tmp_versions
-
-setup:
-	if [ -f "$(RHR)" ]; then yum install kernel-devel-`uname -r`;\
-	else apt-get install linux-headers-`uname -r`; fi
-
-install: $(NAME).so.$(LIB_VER) $(NAME).ko 
-	mkdir -p /lib/modules/$(KVER)/kernel/drivers/$(NAME)
-	cp $(NAME).ko /lib/modules/$(KVER)/kernel/drivers/$(NAME)/
-	if [ -f "$(RHR)" ]; then\
-		printf "%b\n" "#!/bin/sh\nexec /sbin/modprobe $(NAME) >/dev/null 2>&1" > /etc/sysconfig/modules/$(NAME).modules;\
-		chmod 755 /etc/sysconfig/modules/$(NAME).modules;\
-	else\
-		if ! grep -Fxq "$(NAME)" /etc/modules; then echo "$(NAME)" >> /etc/modules; fi;\
-	fi
-	printf "%b\n" "KERNEL==\"$(NAME)\", MODE=\"777\", GROUP=\"root\"" > /etc/udev/rules.d/99-$(NAME).rules
-	printf "/usr/local/lib\n" > $(NAME).conf
-	mv $(NAME).conf /etc/ld.so.conf.d/
-	cp $(DRVR_HDR) /usr/local/include/
-	cp $(LIB_HDR) /usr/local/include/
-	mv lib$(NAME).so.1.0 /usr/local/lib
-	ln -sf /usr/local/lib/lib$(NAME).so.$(LIB_VER) /usr/local/lib/lib$(NAME).so.$(LIB_VER_MAJ)
-	ln -sf /usr/local/lib/lib$(NAME).so.$(LIB_VER) /usr/local/lib/lib$(NAME).so
-	ldconfig
-	depmod
-
-uninstall: 
-	rm -f /usr/local/lib/lib$(NAME).so*
-	rm -f /usr/local/include/$(LIB_HDR)
-	rm -f /usr/local/include/$(DRVR_HDR)
-	rm -f /etc/ld.so.conf.d/$(NAME).conf
-	rm -rf /lib/modules/$(KVER)/kernel/drivers/$(NAME)
-	rm -f /etc/udev/rules.d/99-$(NAME).rules
-	if [ -f "$(RHR)" ]; then rm -f /etc/sysconfig/modules/$(NAME).modules;\
-	else cp /etc/modules ./etc.modules.bak; sed -i '/$(NAME)/d' /etc/modules; fi
-	ldconfig
-	depmod
 
 
